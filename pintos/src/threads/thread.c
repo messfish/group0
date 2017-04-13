@@ -117,6 +117,18 @@ thread_start (void)
   sema_down (&idle_started);
 }
 
+/* this function is used to reduce the time tick by 1 during
+   each thread tick if the status of the thread is blocked.
+   If the value goes to zero, unblock the thread.
+   Note the second argument is a null value. */
+void check_ready(struct thread *t, void *aux) {
+  if(t->status == THREAD_BLOCKED) {
+    t->ticks_for_blocking -= 1;
+    if(t->ticks_for_blocking == 0)
+      thread_unblock(t);
+  }
+}
+
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context. */
 void
@@ -133,6 +145,11 @@ thread_tick (void)
 #endif
   else
     kernel_ticks++;
+
+  /* during each tick, update the conditions for all blocked threads. */
+  enum intr_level old_level = intr_disable();
+  thread_foreach(check_ready, NULL);
+  intr_set_level(old_level);
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
